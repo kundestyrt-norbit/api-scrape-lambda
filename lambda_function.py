@@ -8,8 +8,13 @@ COMPANY_ID = 6
 DEVICE_IDS = (43)
 SECRET = os.environ.get("SECRET")
 ACCESS_KEY = os.environ.get("ACCESS_KEY")
+DATABASE_NAME = os.environ.get("DATABASE_NAME")
+TABLE_NAME = os.environ.get("TABLE_NAME")
+
 assert SECRET
 assert ACCESS_KEY
+assert DATABASE_NAME
+assert TABLE_NAME
 AUTH_HEADERS = {
     "X-API-SECRET": SECRET,
     "X-API-KEY": ACCESS_KEY
@@ -20,9 +25,7 @@ def get_device_ids():
     return [device["id"] for device in r.json()]
 
 def extract_device_data(device_data):
-    print(device_data)
     records = []
-    pprint(device_data)
     for data in device_data:
         record = {
             'Dimensions': [
@@ -50,17 +53,21 @@ def get_device_data(device_ids, start_time, end_time):
         responses += res
     return responses
 
-gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=10)
-start_time = gmt_datetime.strftime("%Y-%m-%dT%H:%M")
-end_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
-records = extract_device_data(get_device_data(get_device_ids(), start_time, end_time))
-client = boto3.client("timestream-write")
+def main():
+    gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=10)
+    start_time = gmt_datetime.strftime("%Y-%m-%dT%H:%M")
+    end_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    records = extract_device_data(get_device_data(get_device_ids(), start_time, end_time))
+    client = boto3.client("timestream-write")
 
-try:
-    result = client.write_records(DatabaseName="SensorData", TableName="test",
-                                        Records=records, CommonAttributes={})
-    print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
-except client.exceptions.RejectedRecordsException as err:
-    print(err)
-except Exception as err:
-    print("Error:", err)
+    try:
+        result = client.write_records(DatabaseName=DATABASE_NAME, TableName=TABLE_NAME,
+                                            Records=records, CommonAttributes={})
+        print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
+    except client.exceptions.RejectedRecordsException as err:
+        print(err)
+    except Exception as err:
+        print("Error:", err)
+
+if __name__ == "__main__":
+    main()
