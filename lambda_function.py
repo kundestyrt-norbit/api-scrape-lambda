@@ -53,7 +53,7 @@ def get_device_data(device_ids, start_time, end_time):
         responses += res
     return responses
 
-def main():
+def lambda_handler(event=None, context=None):
     gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=10)
     start_time = gmt_datetime.strftime("%Y-%m-%dT%H:%M")
     end_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
@@ -70,4 +70,4 @@ def main():
         print("Error:", err)
 
 if __name__ == "__main__":
-    main()
+    lambda_handler()
