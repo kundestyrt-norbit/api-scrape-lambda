@@ -1,15 +1,20 @@
+from cgi import print_arguments
 import os
+from traceback import print_tb
+from urllib import response
 import requests
 from datetime import timedelta, datetime, timezone
 from pprint import pprint
+import json
 import boto3
 
-COMPANY_ID = 6
-DEVICE_IDS = (43)
-SECRET = os.environ.get("SECRET")
-ACCESS_KEY = os.environ.get("ACCESS_KEY")
-DATABASE_NAME = os.environ.get("DATABASE_NAME")
-TABLE_NAME = os.environ.get("TABLE_NAME")
+TIMESTREAM_DATATYPES = ("DOUBLE", "BIGINT", "VARCHAR", "BOOLEAN")
+
+SECRET = os.environ["SECRET"]
+ACCESS_KEY = os.environ["ACCESS_KEY"]
+DATABASE_NAME = os.environ["DATABASE_NAME"]
+TABLE_NAME = os.environ["TABLE_NAME"]
+COMPANY_ID = os.environ["COMPANY_ID"]
 
 assert SECRET
 assert ACCESS_KEY
@@ -20,44 +25,52 @@ AUTH_HEADERS = {
     "X-API-KEY": ACCESS_KEY
 } 
 
-def get_device_ids():
-    r = requests.get(f"http://api.norbitiot.com/api/devices/{COMPANY_ID}/SMART_TAG", headers=AUTH_HEADERS)   
-    return [device["id"] for device in r.json()]
+def get_measurement(data, schema):
+    measurements = []
+    for key, value in schema.items():
+        if isinstance(value, str):
+            measurements.append((key, data[key], value))
+        elif isinstance(value, dict):
+            measurements += get_measurement(data[key],value)
+        else:
+            raise ValueError
+    return measurements
 
-def extract_device_data(device_data):
+def extract_device_data(device_data, sensor_schema):
     records = []
     for data in device_data:
+        measure_values = []
+        measurements = get_measurement(data, sensor_schema)
+        for schema in measurements:
+            measure_values.append({'Name': schema[0], 'Value': str(schema[1]), 'Type': schema[2]})
         record = {
             'Dimensions': [
                 {'Name': 'gateway_id', 'Value': str(data['gatewayId'])},
-                {'Name': 'customer_id', 'Value': str(data['customerId'])},
-                {'Name': 'tagId', 'Value': str(data['tagId'])},
-                {'Name': 'positionLat', 'Value': str(data['positionLat'])},
-                {'Name': 'positionLng', 'Value': str(data['positionLng'])}
+                {'Name': 'tagId', 'Value': str(data['deviceId'])},
             ],
             'Time': str(int(round(datetime.strptime(data['timestamp'], '%Y-%m-%dT%H:%M:%S.%f').timestamp()*1000))),
             'MeasureName': 'sensor_measurements',
             'MeasureValueType': 'MULTI',
-            'MeasureValues': [
-                {'Name': 'temperature', 'Value': str(data['temperature']), 'Type': 'DOUBLE'},
-                {'Name': 'humidity', 'Value': str(data['humidity']), 'Type': 'DOUBLE'}
-            ]
+            'MeasureValues': measure_values
         }
-        records.append(record)
+        if len(measure_values) != 0:
+            records.append(record)
     return records
 
-def get_device_data(device_ids, start_time, end_time):
-    responses = []
-    for id in device_ids:
-        res = requests.get(f"http://api.norbitiot.com/api/td/device/{COMPANY_ID}/{id}/period/{start_time}/{end_time}", headers=AUTH_HEADERS).json()
-        responses += res
-    return responses
+def get_device_data(device_id, start_time, end_time):
+    res = requests.get(f"http://api.norbitiot.com/api/td/device/{COMPANY_ID}/{device_id}/period/{start_time}/{end_time}", headers=AUTH_HEADERS).json()
+    return res
 
 def lambda_handler(event=None, context=None):
-    gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=10)
+    gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=40)
     start_time = gmt_datetime.strftime("%Y-%m-%dT%H:%M")
     end_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
-    records = extract_device_data(get_device_data(get_device_ids(), start_time, end_time))
+    sensor_data_schema = open("sensor_data.json")
+    schema = json.load(sensor_data_schema)
+    records = []
+    for sensor in schema:
+        records += extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
+
     client = boto3.client("timestream-write")
 
     try:

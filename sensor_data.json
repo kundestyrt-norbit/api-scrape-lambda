@@ -1,0 +1,21 @@
+[
+    {"id": 43, "data": {
+        "temperature": "DOUBLE",
+        "humidity": "DOUBLE"
+    }},
+    {"id": 145, "data": {
+        "dataJson":{
+            "mc_10_0": "BIGINT",
+            "mc_1_0": "BIGINT",
+            "mc_2_5": "BIGINT",
+            "mc_4_0": "BIGINT",
+            "nc_0_5": "BIGINT",
+            "nc_10_0": "BIGINT",
+            "nc_1_0": "BIGINT",
+            "nc_2_5": "BIGINT",
+            "nc_4_0": "BIGINT",
+            "typical_particle_size": "BIGINT"
+        }
+    }
+    }
+]
