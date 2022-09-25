@@ -3,6 +3,7 @@ import requests
 from datetime import timedelta, datetime, timezone
 import json
 import boto3
+import sys
 
 TIMESTREAM_DATATYPES = ("DOUBLE", "BIGINT", "VARCHAR", "BOOLEAN")
 
@@ -59,15 +60,20 @@ def get_device_data(device_id, start_time, end_time):
     res = requests.get(f"http://api.norbitiot.com/api/td/device/{COMPANY_ID}/{device_id}/period/{start_time}/{end_time}", headers=AUTH_HEADERS).json()
     return res
 
-def fetch_and_insert_sensor_data(start_time, end_time):
+def fetch_and_insert_sensor_data(start_time, end_time, ids=None):
     sensor_data_schema = open("sensor_data.json")
     schema = json.load(sensor_data_schema)
-    records = {}
+    records = []
     for sensor in schema:
-        records[sensor["id"]] = extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
+        if ids is not None and sensor['id'] not in ids:
+            continue
+        else:
+            records += extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
+    if len(records) == 0:
+        raise ValueError("The specified ids has no matching schemas.")
 
     client = boto3.client("timestream-write")
-    for window_i in range(len(records) - 100 + 1):
+    for window_i in range(len(records) - 100 + 1 if len(records) > 100 else 1):
         record_window = records[window_i: window_i + 100]
         try:
             result = client.write_records(DatabaseName=DATABASE_NAME, TableName=TABLE_NAME,
@@ -87,11 +93,17 @@ def lambda_handler(event=None, context=None):
     
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--days", required=True, type=int)
+    parser.add_argument("--ids", type=int, nargs='*')
+    args = parser.parse_args()
+
     now = datetime.now(timezone.utc)
-    for day in range(1,10):
+    for day in range(1, args.days + 1):
         now_min_delta = now - timedelta(days=day)
         start_time = now_min_delta.strftime("%Y-%m-%dT%H:%M")
         now_min_delta = now - timedelta(days=day-1)
         end_time = now_min_delta.strftime("%Y-%m-%dT%H:%M")
         print(start_time, end_time)
-        fetch_and_insert_sensor_data(start_time, end_time)
+        fetch_and_insert_sensor_data(start_time, end_time, args.ids)
