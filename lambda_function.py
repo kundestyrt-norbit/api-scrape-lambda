@@ -1,10 +1,6 @@
-from cgi import print_arguments
 import os
-from traceback import print_tb
-from urllib import response
 import requests
 from datetime import timedelta, datetime, timezone
-from pprint import pprint
 import json
 import boto3
 
@@ -15,11 +11,13 @@ ACCESS_KEY = os.environ["ACCESS_KEY"]
 DATABASE_NAME = os.environ["DATABASE_NAME"]
 TABLE_NAME = os.environ["TABLE_NAME"]
 COMPANY_ID = os.environ["COMPANY_ID"]
+TIME_DELTA = int(os.environ["TIME_DELTA"])
 
 assert SECRET
 assert ACCESS_KEY
 assert DATABASE_NAME
 assert TABLE_NAME
+assert TIME_DELTA
 AUTH_HEADERS = {
     "X-API-SECRET": SECRET,
     "X-API-KEY": ACCESS_KEY
@@ -61,26 +59,39 @@ def get_device_data(device_id, start_time, end_time):
     res = requests.get(f"http://api.norbitiot.com/api/td/device/{COMPANY_ID}/{device_id}/period/{start_time}/{end_time}", headers=AUTH_HEADERS).json()
     return res
 
-def lambda_handler(event=None, context=None):
-    gmt_datetime = datetime.now(timezone.utc) - timedelta(minutes=40)
-    start_time = gmt_datetime.strftime("%Y-%m-%dT%H:%M")
-    end_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+def fetch_and_insert_sensor_data(start_time, end_time):
     sensor_data_schema = open("sensor_data.json")
     schema = json.load(sensor_data_schema)
-    records = []
+    records = {}
     for sensor in schema:
-        records += extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
+        records[sensor["id"]] = extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
 
     client = boto3.client("timestream-write")
-
-    try:
-        result = client.write_records(DatabaseName=DATABASE_NAME, TableName=TABLE_NAME,
-                                            Records=records, CommonAttributes={})
-        print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
-    except client.exceptions.RejectedRecordsException as err:
-        print(err)
-    except Exception as err:
-        print("Error:", err)
+    for window_i in range(len(records) - 100 + 1):
+        record_window = records[window_i: window_i + 100]
+        try:
+            result = client.write_records(DatabaseName=DATABASE_NAME, TableName=TABLE_NAME,
+                                                Records=record_window, CommonAttributes={})
+            print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
+        except client.exceptions.RejectedRecordsException as err:
+            print(err)
+        except Exception as err:
+            print("Error:", err)
+ 
+def lambda_handler(event=None, context=None):
+    now = datetime.now(timezone.utc) 
+    now_min_delta = now - timedelta(minutes=TIME_DELTA)
+    start_time = now_min_delta.strftime("%Y-%m-%dT%H:%M")
+    end_time = now.strftime("%Y-%m-%dT%H:%M")
+    fetch_and_insert_sensor_data(start_time, end_time)
+    
 
 if __name__ == "__main__":
-    lambda_handler()
+    now = datetime.now(timezone.utc)
+    for day in range(1,10):
+        now_min_delta = now - timedelta(days=day)
+        start_time = now_min_delta.strftime("%Y-%m-%dT%H:%M")
+        now_min_delta = now - timedelta(days=day-1)
+        end_time = now_min_delta.strftime("%Y-%m-%dT%H:%M")
+        print(start_time, end_time)
+        fetch_and_insert_sensor_data(start_time, end_time)
