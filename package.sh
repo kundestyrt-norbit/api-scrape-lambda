@@ -6,3 +6,4 @@ cd package
 zip -r ../$package_name.zip .
 cd ..
 zip -g $package_name.zip lambda_function.py
+zip -g $package_name.zip sensor_data.json
