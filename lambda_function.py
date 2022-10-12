@@ -5,6 +5,7 @@ import json
 import boto3
 import sys
 
+# Define timestream supported datatypes
 TIMESTREAM_DATATYPES = ("DOUBLE", "BIGINT", "VARCHAR", "BOOLEAN")
 
 SECRET = os.environ["SECRET"]
@@ -25,6 +26,9 @@ AUTH_HEADERS = {
 } 
 
 def get_measurement(data, schema):
+    '''
+    Get the measurement data from the data defined by the schema.
+    '''
     measurements = []
     for key, value in schema.items():
         if isinstance(value, str):
@@ -35,13 +39,16 @@ def get_measurement(data, schema):
             raise ValueError
     return measurements
 
-def extract_device_data(device_data, sensor_schema):
+def extract_device_records(device_data, sensor_schema):
+    '''
+    Extracts the corresponding timestream records from the sensor data.
+    '''
     records = []
     for data in device_data:
         measure_values = []
         measurements = get_measurement(data, sensor_schema)
-        for schema in measurements:
-            measure_values.append({'Name': schema[0], 'Value': str(schema[1]), 'Type': schema[2]})
+        for measurement in measurements:
+            measure_values.append({'Name': measurement[0], 'Value': str(measurement[1]), 'Type': measurement[2]})
         record = {
             'Dimensions': [
                 {'Name': 'gateway_id', 'Value': str(data['gatewayId'])},
@@ -61,6 +68,9 @@ def get_device_data(device_id, start_time, end_time):
     return res
 
 def fetch_and_insert_sensor_data(start_time, end_time, ids=None):
+    '''
+    Fetch sensor data from the defined ids and insert it into the database.
+    '''
     sensor_data_schema = open("sensor_data.json")
     schema = json.load(sensor_data_schema)
     records = []
@@ -68,11 +78,13 @@ def fetch_and_insert_sensor_data(start_time, end_time, ids=None):
         if ids is not None and sensor['id'] not in ids:
             continue
         else:
-            records += extract_device_data(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
+            records += extract_device_records(get_device_data(sensor["id"], start_time, end_time), sensor["data"])
     if len(records) == 0:
         raise ValueError("The specified ids has no matching schemas.")
 
     client = boto3.client("timestream-write")
+
+    # If the number of records is too high the uploads will have to be batched
     for window_i in range(len(records) - 100 + 1 if len(records) > 100 else 1):
         record_window = records[window_i: window_i + 100]
         try:
@@ -84,6 +96,7 @@ def fetch_and_insert_sensor_data(start_time, end_time, ids=None):
         except Exception as err:
             print("Error:", err)
  
+# The entrypoint for the aws lambda
 def lambda_handler(event=None, context=None):
     now = datetime.now(timezone.utc) 
     now_min_delta = now - timedelta(minutes=TIME_DELTA)
@@ -91,7 +104,7 @@ def lambda_handler(event=None, context=None):
     end_time = now.strftime("%Y-%m-%dT%H:%M")
     fetch_and_insert_sensor_data(start_time, end_time)
     
-
+# Main script if the program should be run as a cli
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
