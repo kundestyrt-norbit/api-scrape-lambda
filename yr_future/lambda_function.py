@@ -16,7 +16,7 @@ TABLE_NAME = os.getenv("TABLE_NAME")
 assert DATABASE_NAME
 assert TABLE_NAME
 
-def get_measurement(data: pd.Dataframe, time_delta: int):
+def get_measurement(data, time_delta: int):
     """Extract measurements from json object
 
     :param data: json-object to extract data from
