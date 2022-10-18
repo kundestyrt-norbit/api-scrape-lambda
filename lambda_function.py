@@ -83,9 +83,8 @@ def fetch_and_insert_sensor_data(start_time, end_time, ids=None):
         raise ValueError("The specified ids has no matching schemas.")
 
     client = boto3.client("timestream-write")
-
     # If the number of records is too high the uploads will have to be batched
-    for window_i in range(len(records) - 100 + 1 if len(records) > 100 else 1):
+    for window_i in range(0, len(records), 100):
         record_window = records[window_i: window_i + 100]
         try:
             result = client.write_records(DatabaseName=DATABASE_NAME, TableName=TABLE_NAME,
