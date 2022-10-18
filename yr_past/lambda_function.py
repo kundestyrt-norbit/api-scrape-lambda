@@ -21,7 +21,7 @@ assert DATABASE_NAME
 assert TABLE_NAME
 assert CLIENT_ID
 
-def get_measurement(data):
+def get_measurement(data: pd.Series):
     measurements = []
     for name in data.index:
         if name != "max_wind_speed(wind_from_direction PT1H)":
@@ -50,8 +50,21 @@ def get_measurement(data):
     return measurements
 
 def get_and_extract_yr_data(lat: float, lon: float, gateway_id: int, measure_station: str):
+    """Gets the historical data from yr.no by using the FROST API,
+    and returns the rows to be inserted to the timestream database
+
+    :param lat: Lat of the gateway, to be stored in the database. Future usage: lat for dynamically getting the source-id of the met-station
+    :param lon: Lon of the gateway, to be stored in the database. Future usage: lon for dynamically getting the source-id of the met-station
+    :param gateway_id: Gateway id to be stored in the database
+    :param measure_station: id of met-station. Can be found via the FROST API at https://frost.met.no/sources/v0.jsonld
+    :return: rows to be inserted into database
+    """
     client_id = CLIENT_ID
+    # api endpoint for getting the sources if that is needed
     # endpoint = f"https://frost.met.no/sources/v0.jsonld?geometry=nearest(POINT({round(lon, 4)} {round(lat, 4)}))"
+    
+    # get data from yesterday and today. Is set to tomorrow at 00:00. 
+    # This is done to avoid gaps at 23-00 
     tomorrow = dt.date.today() + dt.timedelta(days=1)
     yesterday = dt.date.today() - dt.timedelta(days=1)
     endpoint = 'https://frost.met.no/observations/v0.jsonld'
@@ -63,13 +76,18 @@ def get_and_extract_yr_data(lat: float, lon: float, gateway_id: int, measure_sta
     r = requests.get(endpoint, parameters, auth=(client_id,''))
     json_data = r.json()
     data = json_data['data']
+
+    # get all observations and the time
     df = pd.json_normalize(data, record_path=['observations'], meta='referenceTime')
     df = df[['referenceTime','value', 'elementId']].rename(columns={'referenceTime':'timestamp'})
     df['timestamp'] = pd.to_datetime(df['timestamp'])
 
+    # reset table structure so that the columns is the values of the sensors and the
+    # index is the timestamp.
     df = df.pivot(index='timestamp', columns='elementId', values='value').reset_index()
     df.set_index('timestamp', inplace=True)
-    print(df)
+
+    # add all columns as columns in the timestream database
     records = []
     measure_values = []
     for timestamp, row in df.iterrows():

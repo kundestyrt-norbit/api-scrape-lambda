@@ -16,7 +16,13 @@ TABLE_NAME = os.getenv("TABLE_NAME")
 assert DATABASE_NAME
 assert TABLE_NAME
 
-def get_measurement(data, time_delta):
+def get_measurement(data: pd.Dataframe, time_delta: int):
+    """Extract measurements from json object
+
+    :param data: json-object to extract data from
+    :param time_delta: prediction for time_delta hours in the future
+    :return: measurements to be inserted into timestream
+    """
     measurements = []
     for name in ["air_temperature", "relative_humidity", "wind_speed"]:
         measurements.append({
@@ -47,12 +53,23 @@ def get_measurement(data, time_delta):
     return measurements
 
 def get_and_extract_yr_data(lat: float, lon: float, gateway_id: int):
+    """Gets the predicted data from yr.no by using the API to yr.no,
+    and returns the rows to be inserted to the timestream database
+
+    :param lat: Lat of the gateway, to be stored in the database. Used for finding weather forecast
+    :param lon: Lon of the gateway, to be stored in the database. Used for finding weather forecast
+    :param gateway_id: Gateway id to be stored in the database
+    :return: rows to be inserted into database
+    """
+    # Must be included to not get 403 error
     header = {
         'User-Agent': 'NorbitMose github.com/kundestyrt-norbit',
     }
+    # Yr.no API states that lat lon only should have 4 decimal precision
     yr_data = requests.get(f"https://api.met.no/weatherapi/locationforecast/2.0/compact.json?lat={round(lat, 4)}&lon={round(lon, 4)}", headers=header).json()
     records = []
     measure_values = []
+    # get prediction for next 24 hours
     for i, data in enumerate(yr_data["properties"]["timeseries"]):
         if i < 24:
             measure_values.extend(get_measurement(data=data,time_delta=i+1))
