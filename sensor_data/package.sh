@@ -1,7 +1,8 @@
 #!/bin/bash
 package_name=deployment-package
+pipenv install
 pipenv run pip freeze > requirements.txt
-pip install --target ./package requests
+pip install -r requirements.txt --target ./package
 cd package
 zip -r ../$package_name.zip .
 cd ..
