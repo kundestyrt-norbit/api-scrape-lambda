@@ -5,7 +5,6 @@ import time
 import random
 import sys, traceback
 from timeit import default_timer as timer
-import numpy as np
 import datetime
 import pandas as pd
 import os
@@ -15,20 +14,13 @@ import argparse
 '''
 ## Create a timestream query client.
 '''
-def createQueryClient(region, profile = None):
-    if profile == None:
-        print("Using credentials from the environment")
-
-    print(region)
+def createQueryClient(region, aws_access_key_id, aws_secret_access_key):
     config = Config()
-    if profile != None:
-        session = boto3.Session(profile_name = profile)
-        client = session.client(service_name = 'timestream-query',
-                                region_name = region, config = config)
-    else:
-        session = boto3.Session()
-        client = session.client(service_name = 'timestream-query',
-                                region_name = region, config = config)
+    session = boto3.Session()
+    client = session.client(service_name='timestream-query',
+                            region_name=region, config=config,
+                            aws_access_key_id=aws_access_key_id,
+                            aws_secret_access_key=aws_secret_access_key)
 
     return client
 
