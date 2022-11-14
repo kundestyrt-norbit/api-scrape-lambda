@@ -32,9 +32,9 @@ AWS Console region eu-west-1 -> Lambda -> Functions -> fetchAndStore<folder_name
 ```
 Choose the `Code` tab and click `Upload from` and choose `.zip file`. Upload the zip file, and the lambda function is now deployed.
 ### sensor_data
-Fetches data from the sensors defined in [sensor_data.json](./sensor_data//sensor_data.json) from [Norbits BlueTrack API](https://bluetrack.norbitiot.com/). The sensors are set up fetching the last 10 minutes by default, as the Norbit sends data to their database on a 5 minute schedule. The lambda function is set up running and fetching data every 9 minutes.
+Fetches data from the sensors defined in [sensor_data/sensor_data.json](sensor_data//sensor_data.json) from [Norbits BlueTrack API](https://bluetrack.norbitiot.com/). The sensors are set up fetching the last 10 minutes by default, as the Norbit sends data to their database on a 5 minute schedule. The lambda function is set up running and fetching data every 9 minutes.
 
-The schema defined in [sensor_data/sensor_data.json](.sensor_data/sensor_data.json) describes the dataformat which is expected from the BlueTrack API. Each element in the file should contain the sensor id and recursively define the fields where the data is located.
+The schema defined in [sensor_data/sensor_data.json](sensor_data/sensor_data.json) describes the dataformat which is expected from the BlueTrack API. Each element in the file should contain the sensor id and recursively define the fields where the data is located.
 
 I.E:
 
